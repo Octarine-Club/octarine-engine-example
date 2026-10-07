@@ -36,6 +36,10 @@ function stress_test.run()
                         height = 32,
                         offset = { x = 0, y = 0 }
                     },
+                    separation = {
+                        radius = 16.0,
+                        weight = 1.0
+                    },
                     -- Effectively invulnerable. Shooters sit on a grid and their own projectiles
                     -- overlap neighbours, so normal (100hp) health makes them shoot each other to
                     -- death within ~2s and the scene collapses (render/collision load decays to
