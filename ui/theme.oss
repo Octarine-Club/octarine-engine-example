@@ -1,0 +1,218 @@
+/* ui/theme.oss
+ * Shared Octarine Showcase theme variables, typography, layout cards, and interactive states.
+ * Color palette: deep midnight slate (#0e1525), tactical indigo panels (#162038),
+ * Octarine gold (#eab308), electric cyan (#38bdf8), radar emerald (#22c55e).
+ */
+
+:root {
+  --bg-backdrop: #0b1120eb;
+  --bg-panel: #151f36e8;
+  --bg-card: #1d2a47eb;
+  --bg-card-alt: #243456eb;
+  --border-subtle: #334155;
+  --border-active: #38bdf8;
+  --accent-gold: #eab308;
+  --accent-gold-hover: #fde047;
+  --accent-cyan: #38bdf8;
+  --accent-green: #22c55e;
+  --accent-red: #ef4444;
+  --text-primary: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+}
+
+.panel-surface {
+  background-color: var(--bg-panel);
+  border-width: 2px;
+  border-color: var(--border-subtle);
+  border-radius: 8px;
+}
+
+.card-surface {
+  background-color: var(--bg-card);
+  border-width: 1px;
+  border-color: var(--border-subtle);
+  border-radius: 6px;
+}
+
+.chrome-bar {
+  background-color: #0b1120dc;
+  border-width: 1px;
+  border-color: #334155;
+  border-radius: 6px;
+  padding: 6px 12px;
+  gap: 10px;
+}
+
+.guide-panel {
+  background-color: #0f172ae0;
+  border-width: 2px;
+  border-color: var(--accent-cyan);
+  border-radius: 8px;
+  padding: 14px;
+  gap: 8px;
+}
+
+.title-display {
+  font: charriot-24;
+  color: var(--accent-gold);
+  outline-color: #000000ff;
+  outline-width: 2px;
+}
+
+.section-heading {
+  font: charriot-16;
+  color: var(--accent-cyan);
+  outline-color: #000000ff;
+  outline-width: 1px;
+}
+
+.body-text {
+  font: arial-font-14;
+  color: var(--text-primary);
+}
+
+.muted-text {
+  font: arial-font-12;
+  color: var(--text-muted);
+}
+
+.pill-box {
+  background-color: #0f172ae6;
+  border-width: 1px;
+  border-color: #475569;
+  border-radius: 4px;
+  padding: 4px 10px;
+  gap: 6px;
+}
+
+.btn {
+  background-color: #1e293b;
+  color: var(--text-primary);
+  font: arial-font-14;
+  border-width: 1px;
+  border-color: #475569;
+  border-radius: 6px;
+  text-align: center;
+  text-valign: center;
+  sound-hover: sfx_ui_hover;
+  sound-click: sfx_ui_click;
+}
+
+.btn:hover {
+  background-color: #334155;
+  border-color: var(--accent-cyan);
+}
+
+.btn:active {
+  background-color: #0f172a;
+}
+
+.btn:focus {
+  border-width: 2px;
+  border-color: var(--accent-gold);
+}
+
+.btn:disabled {
+  background-color: #0f172a;
+  border-color: #1e293b;
+  color: var(--text-dim);
+}
+
+.btn-primary {
+  background-color: #ca8a04;
+  color: #0f172a;
+  font: charriot-16;
+  border-width: 2px;
+  border-color: #fde047;
+  border-radius: 6px;
+  text-align: center;
+  text-valign: center;
+  sound-hover: sfx_ui_hover;
+  sound-click: sfx_ui_click;
+}
+
+.btn-primary:hover {
+  background-color: #eab308;
+  border-color: #fef08a;
+}
+
+.btn-primary:active {
+  background-color: #a16207;
+}
+
+.btn-primary:focus {
+  border-width: 2px;
+  border-color: #38bdf8;
+}
+
+.nav-card {
+  background-color: #17233de6;
+  color: var(--text-primary);
+  font: charriot-16;
+  border-width: 1px;
+  border-color: #334155;
+  border-radius: 6px;
+  text-align: left;
+  text-valign: center;
+  padding: 0px 14px;
+  sound-hover: sfx_ui_hover;
+  sound-click: sfx_ui_click;
+}
+
+.nav-card:hover {
+  background-color: #243659f0;
+  border-color: var(--accent-cyan);
+}
+
+.nav-card:focus {
+  background-color: #223458f5;
+  border-width: 2px;
+  border-color: var(--accent-gold);
+}
+
+.nav-card:active {
+  background-color: #111c33;
+}
+
+.toggle-btn {
+  background-color: #1e293b;
+  color: var(--text-primary);
+  font: arial-font-12;
+  border-width: 1px;
+  border-color: #475569;
+  border-radius: 5px;
+  text-align: center;
+  text-valign: center;
+  sound-hover: sfx_ui_hover;
+  sound-click: sfx_ui_click;
+}
+
+.toggle-btn:hover {
+  background-color: #334155;
+  border-color: var(--accent-cyan);
+}
+
+.toggle-btn:checked {
+  background-color: #0369a1;
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.toggle-btn:focus {
+  border-width: 2px;
+  border-color: var(--accent-gold);
+}
+
+.slider-ctrl {
+  track-color: #0f172a;
+  color: #38bdf8;
+  border-width: 1px;
+  border-color: #475569;
+  border-radius: 4px;
+}
+
+.slider-ctrl:focus {
+  border-width: 2px;
+  border-color: var(--accent-gold);
+}

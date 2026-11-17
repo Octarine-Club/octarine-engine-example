@@ -1,0 +1,17 @@
+<OXML>
+  <Style src="ui/theme.oss" />
+
+  <Canvas fixed="true" base-layer="30">
+    <Column width="100%" height="100%" padding="12px" justify="end" pointer-events="none">
+      <Row class="chrome-bar" width="auto" height="52px" align="center" gap="10px" pointer-events="stop">
+        <Toggle class="toggle-btn" width="110px" height="30px" text="Mute Audio" bind-value="muted" on-change="onToggleMute" />
+        <Label text="Vol: {volumePct}%" font="arial-font-12" color="#e2e8f0" width="76px" height="22px" text-valign="center" />
+        <Slider class="slider-ctrl" width="140px" height="18px" min="0" max="100" step="5" bind-value="volumePct" color="#38bdf8" track-color="#0f172a" on-change="onVolumeChange" />
+        <Button class="btn" width="112px" height="30px" text="Radar Ping" on-click="onPlayPing" />
+        <Button class="btn" width="112px" height="30px" text="Cannon SFX" on-click="onPlayCannon" />
+        <Button class="btn" width="118px" height="30px" text="Explosion SFX" on-click="onPlayExplosion" />
+        <Label text="{listenerReadout}" font="arial-font-12" color="#eab308" width="auto" height="22px" text-valign="center" />
+      </Row>
+    </Column>
+  </Canvas>
+</OXML>

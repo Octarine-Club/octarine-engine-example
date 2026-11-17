@@ -1,81 +1,51 @@
+-- scripts/stress-test.lua
+-- Headless / benchmark workload invoked by `--startup-mode stress` (e.g., octarine-engine/scripts/bench.sh).
+-- Uses only modern v0.2.6 built-in ECS components (plus optional native C++ swarm when linked)
+-- so stock player-profile runs execute cleanly with zero script warnings.
+
 local stress_test = {}
 
 function stress_test.run()
-    -- Deterministic seed so every run produces identical projectile velocities
-    -- and stagger offsets, eliminating RNG-driven variance from benchmarks.
     math.randomseed(42)
+    set_sim_seed(42)
+    set_game_map_dimensions(game_window_width, game_window_height)
 
-    load_asset({ type = "texture", id = "tank-texture", file = "images/tank-tiger-up.png" })
-    load_asset({ type = "texture", id = "bullet-texture", file = "images/bullet.png" })
+    local native_on = (native_showcase ~= nil and native_showcase.is_enabled())
 
-    local frequency = 0.1
+    acquire_scene_assets({
+        preload = {
+            "tank-texture",
+            "chopper-drone",
+            "bullet-texture",
+        },
+    })
+
+    if native_on then
+        native_showcase.spawn_swarm_batch(1600, game_window_width * 0.5, game_window_height * 0.5)
+        log("Stress test loaded 1600 native C++ swarm entities.")
+        return
+    end
 
     local count = 0
-    for i = 0, game_window_width, 32 do
-        for j = 0, game_window_height, 32 do
-            -- Stagger initial fire times across [0, frequency) so emitters don't
-            -- all spawn projectiles on the same frame (thundering-herd effect).
-            -- The deterministic seed above keeps this reproducible across runs.
-            local initial_delay = math.random() * frequency
-
-            local shooter = {
-                tag = "enemies",
+    for gx = 32, game_window_width - 32, 32 do
+        for gy = 32, game_window_height - 32, 32 do
+            local vx = math.random(-90, 90)
+            local vy = math.random(-90, 90)
+            load_entity({
+                tag         = "enemies",
                 entity_mask = 2,
-                components = {
-                    transform = {
-                        position = { x = i, y = j },
-                    },
-                    sprite = {
-                        texture_asset_id = "tank-texture",
-                        width = 32,
-                        height = 32,
-                        layer = 2
-                    },
-                    box_collider = {
-                        width = 32,
-                        height = 32,
-                        offset = { x = 0, y = 0 }
-                    },
-                    separation = {
-                        radius = 16.0,
-                        weight = 1.0
-                    },
-                    -- Effectively invulnerable. Shooters sit on a grid and their own projectiles
-                    -- overlap neighbours, so normal (100hp) health makes them shoot each other to
-                    -- death within ~2s and the scene collapses (render/collision load decays to
-                    -- near zero). A huge health pool keeps the HealthComponent type registered (so
-                    -- the collision-damage path stays valid) while ensuring nothing dies in a bench
-                    -- window — the population holds the intended steady state the whole run.
-                    health = {
-                        max_health = 1000000000,
-                        current_health = 1000000000
-                    },
-                    projectile_emitter = {
-                        projectile_velocity = { x = math.random(-100, 100), y = math.random(-100, 100) },
-                        -- Short lifetime so the scene reaches a stable ~20-bullets-per-shooter
-                        -- steady state in ~2s — old 120s value never reached steady state in a
-                        -- realistic bench window, leaving runs measuring only the ramp.
-                        projectile_duration = 2,
-                        hit_damage = 20,
-                        friendly = false,
-                        collision_mask = 2,
-                        -- Engine-side auto-fire (perf W1): the C++ ProjectileEmitSystem ticks this
-                        -- emitter every repeat_frequency seconds and spawns a projectile, replacing
-                        -- the per-entity auto_fire.lua loop (one sol2 call per shooter per frame).
-                        -- countdown_timer seeds the first shot across [0, frequency) so the grid
-                        -- doesn't spawn ~2074 projectiles on frame 0 — the stagger the Lua
-                        -- initial_delay used to provide.
-                        repeat_frequency = frequency,
-                        countdown_timer = initial_delay,
-                    },
-                }
-            }
-            load_entity(shooter)
+                components  = {
+                    transform    = { position = { x = gx, y = gy } },
+                    rigidbody    = { velocity = { x = vx, y = vy } },
+                    sprite       = { texture_asset_id = "tank-texture", width = 32, height = 32, layer = 2 },
+                    box_collider = { width = 28, height = 28, offset = { x = 2, y = 2 }, collision_mask = 2 },
+                },
+            })
             count = count + 1
         end
     end
 
-    print("Loaded " .. count .. " stress test entities")
+    log("Loaded " .. tostring(count) .. " stress test entities")
 end
 
 return stress_test

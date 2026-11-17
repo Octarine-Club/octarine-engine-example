@@ -1,157 +1,143 @@
 -- game.lua
+-- Entry point executed via config.ini StartupScript=game.lua.
+-- Sets up module loading, persistent settings & save profile, declarative input bindings,
+-- and dispatches based on `oct_startup_mode`.
 
-local debug_x_position = 0
-local debug_y_position = 0
-local debug_scale = 1.0
-local debug_rotation = 0.0
-local debug_x_velocity = 0
-local debug_y_velocity = 0
-local sprites = {"truck-texture", "tank-texture"}
-local debug_sprite_index = 1
-local debug_projectile_angle = 0.0
-local debug_projectile_frequency = 1.0
-local debug_projectile_duration = 5.0
-local debug_projectile_speed = 100.0
-local debug_projectile_damage = 20
-local debug_max_health = 100
-local debug_starting_health = 100
+_G.__showcase_modules = _G.__showcase_modules or {}
 
-function spawn_enemy_gui(self, entity)
-    if (ImGui.Begin("Spawn Enemy")) then
-        debug_x_position = ImGui.InputInt("Spawn X", debug_x_position)
-        debug_y_position = ImGui.InputInt("Spawn Y", debug_y_position)
-        debug_scale = ImGui.InputFloat("Scale", debug_scale)
-        debug_rotation = ImGui.InputFloat("Rotation", debug_rotation)
-        debug_x_velocity = ImGui.InputInt("X Velocity", debug_x_velocity)
-        debug_y_velocity = ImGui.InputInt("Y Velocity", debug_y_velocity)
+function showcase_require(rel_path)
+    if _G.__showcase_modules[rel_path] ~= nil then
+        return _G.__showcase_modules[rel_path]
+    end
+    local full_path = get_asset_path(rel_path)
+    local mod = dofile(full_path)
+    if mod ~= nil then
+        _G.__showcase_modules[rel_path] = mod
+    else
+        _G.__showcase_modules[rel_path] = true
+    end
+    return _G.__showcase_modules[rel_path]
+end
 
-        ImGui.Separator()
+-- Define typed user preferences stored in user_settings.ini under the OS save root.
+settings.define({
+    master_volume    = 0.85,
+    audio_muted      = false,
+    show_hints       = true,
+    difficulty       = "normal",
+    preferred_stitch = "toroidal",
+    ui_wireframes    = false,
+})
 
-        debug_sprite_index, clicked = ImGui.Combo("Sprite", debug_sprite_index, sprites, 2)
+if not is_headless() then
+    set_master_volume(settings.get("master_volume", 0.85))
+    set_audio_muted(settings.get("audio_muted", false))
+end
 
-        ImGui.Separator("Projectile Settings")
-        debug_projectile_angle = ImGui.InputFloat("Projectile Angle", debug_projectile_angle)
-        debug_projectile_frequency = ImGui.InputFloat("Projectile Frequency", debug_projectile_frequency)
-        debug_projectile_duration = ImGui.InputFloat("Projectile Duration", debug_projectile_duration)
-        debug_projectile_speed = ImGui.InputFloat("Projectile Speed", debug_projectile_speed)
-        debug_projectile_damage = ImGui.InputInt("Projectile Damage", debug_projectile_damage)
+-- Persistent cross-scene player/showcase profile via sandboxed storage.* API.
+local function default_profile()
+    return {
+        best_score         = 0,
+        missions_played    = 0,
+        missions_won       = 0,
+        trees_cleared      = 0,
+        labs_visited       = {},
+        last_scene         = "hub",
+    }
+end
 
-        ImGui.Separator("Health Settings")
-        debug_max_health = ImGui.InputInt("Max Health", debug_max_health)
-        debug_starting_health = ImGui.InputInt("Starting Health", debug_starting_health)
-
-        ImGui.Separator()
-        if ImGui.Button("Spawn Enemy") then
-            log("Spawning enemy at (" .. debug_x_position .. ", " .. debug_y_position .. ") with scale " .. debug_scale)
-            local enemy_entity = {
-                tag = "enemies",
-                components = {
-                    transform = {
-                        position = { x = debug_x_position, y = debug_y_position },
-                        scale = { x = debug_scale, y = debug_scale },
-                        rotation = debug_rotation,
-                    },
-                    sprite = {
-                        texture_asset_id = sprites[debug_sprite_index + 1],
-                        width = 32,
-                        height = 32,
-                        layer = 1
-                    },
-                    box_collider = {
-                        width = 32,
-                        height = 32,
-                        offset = { x = 0, y = 0 }
-                    },
-                    health = {
-                        max_health = debug_max_health,
-                        current_health = debug_starting_health
-                    },
-                    projectile_emitter = {
-                        projectile_velocity = { x = math.cos(math.rad(debug_projectile_angle)) * debug_projectile_speed,
-                                                y = math.sin(math.rad(debug_projectile_angle)) * debug_projectile_speed },
-                        projectile_duration = debug_projectile_duration,
-                        repeat_frequency = debug_projectile_frequency,
-                        hit_damage = debug_projectile_damage,
-                        friendly = false
-                    }
-                }
-            }
-            load_entity(enemy_entity)
+showcase_profile = storage.read_table("save_profile.lua")
+if type(showcase_profile) ~= "table" then
+    showcase_profile = default_profile()
+else
+    local defaults = default_profile()
+    for k, v in pairs(defaults) do
+        if showcase_profile[k] == nil then
+            showcase_profile[k] = v
         end
     end
-    ImGui.End()
 end
 
--- Live transform inspector for the Player. Exercises the new Lua bindings:
---   registry.has_position / get_position
---   registry.has_rotation / get_rotation
---   registry.has_scale    / get_scale
--- Mutations write straight back into the component via the usertype's `value` field.
-function player_transform_gui(self, entity)
-    if (ImGui.Begin("Player Transform")) then
-        local player = find_entity_by_name("Player")
-        if player == nil then
-            ImGui.Text("No player entity loaded.")
-        else
-            if registry.has_position(player) then
-                local pos = registry.get_position(player)
-                pos.value.x = ImGui.InputFloat("Pos X", pos.value.x)
-                pos.value.y = ImGui.InputFloat("Pos Y", pos.value.y)
-            end
-            if registry.has_rotation(player) then
-                local rot = registry.get_rotation(player)
-                local deg = math.deg(rot.value)
-                deg = ImGui.SliderFloat("Rotation (deg)", deg, -180.0, 180.0)
-                rot.value = math.rad(deg)
-            else
-                ImGui.Text("Player has no rotation component.")
-            end
-            if registry.has_scale(player) then
-                local scl = registry.get_scale(player)
-                local s = ImGui.SliderFloat("Uniform Scale", scl.value.x, 0.25, 4.0)
-                scl.value.x = s
-                scl.value.y = s
-            else
-                ImGui.Text("Player has no scale component.")
-            end
-        end
-    end
-    ImGui.End()
+function save_showcase_profile()
+    return storage.write_table("save_profile.lua", showcase_profile)
 end
 
-function create_debug_gui()
-    log("Creating debug GUI...")
-    spawn_enemy_gui_entity = {
-        components = { script = { on_debug_gui = spawn_enemy_gui } }
-    }
-    player_transform_gui_entity = {
-        components = { script = { on_debug_gui = player_transform_gui } }
-    }
-
-    load_entity(spawn_enemy_gui_entity)
-    load_entity(player_transform_gui_entity)
+function mark_lab_visited(scene_id)
+    showcase_profile.last_scene = scene_id
+    showcase_profile.labs_visited = showcase_profile.labs_visited or {}
+    showcase_profile.labs_visited[scene_id] = true
+    save_showcase_profile()
 end
 
--- Load shared lib modules once. Each sets a global table (input_map, player_controller, spawn, …).
--- Globals survive load_scene() calls so every demo scene can use them without re-dofile.
-dofile(get_asset_path("scripts/lib/input_map.lua"))
-dofile(get_asset_path("scripts/lib/player_controller.lua"))
-dofile(get_asset_path("scripts/lib/auto_fire.lua"))
-dofile(get_asset_path("scripts/lib/spawn.lua"))
-dofile(get_asset_path("scripts/lib/health_label.lua"))
-dofile(get_asset_path("scripts/lib/spinner.lua"))
-dofile(get_asset_path("scripts/lib/hub_button.lua"))
-dofile(get_asset_path("scripts/lib/demo_hud.lua"))
+-- Load shared libraries into globals so every scene can use them cleanly.
+input_map      = showcase_require("scripts/lib/input_map.lua")
+spinner        = showcase_require("scripts/lib/spinner.lua")
+combat         = showcase_require("scripts/lib/combat.lua")
+jungle_tilemap = showcase_require("scripts/lib/jungle_tilemap.lua")
+showcase_dev   = showcase_require("scripts/dev/showcase_dev_tools.lua")
+chrome         = showcase_require("scripts/lib/chrome.lua")
 
--- install_click_spawn() is deferred to gameplay-demo.lua so it does not fire in the hub.
 input_map.install()
 
--- Scene selection. The engine passes the process --startup-mode through as the global
--- `oct_startup_mode`; "stress" loads the deterministic benchmark grid (scripts/stress-test.lua),
--- anything else (incl. nil / "main") loads the hub showcase menu.
+if oct_startup_mode ~= "bake" and type(acquire_scene_assets) == "function" then
+    acquire_scene_assets({
+        preload = {
+            "arial-font-10",
+            "arial-font-12",
+            "arial-font-14",
+            "charriot-14",
+            "charriot-16",
+            "sfx_ui_hover",
+            "sfx_ui_click",
+        },
+    })
+end
+
 if oct_startup_mode == "stress" then
     local stress_test = dofile(get_asset_path("scripts/stress-test.lua"))
     stress_test.run()
+elseif oct_startup_mode == "verify" then
+    local verifier = dofile(get_asset_path("scripts/verify_showcase.lua"))
+    verifier.run()
+elseif oct_startup_mode == "bake" then
+    -- Validate every catalog asset referenced across all showcase scenes during `-m bake`
+    -- (without calling load_scene, since bake mode has no SDL renderer / TTF video backend).
+    local scene_paths = {
+        "scripts/scenes/hub.lua",
+        "scripts/scenes/jungle_strike.lua",
+        "scripts/scenes/ui_lab.lua",
+        "scripts/scenes/physics_lab.lua",
+        "scripts/scenes/tilemap_lab.lua",
+        "scripts/scenes/audio_lab.lua",
+        "scripts/scenes/stress_lab.lua",
+    }
+    for _, sp in ipairs(scene_paths) do
+        local tbl = dofile(get_asset_path(sp))
+        if type(tbl) == "table" then
+            acquire_scene_assets(tbl)
+        end
+    end
+    acquire_scene_assets({
+        preload = {
+            "arial-font-10", "arial-font-12", "arial-font-14", "arial-font-18",
+            "charriot-14", "charriot-16", "charriot-24", "charriot-32",
+            "bullet-texture", "chopper-texture", "chopper-drone", "radar-sheet", "icon",
+            "landing-base", "takeoff-base", "tree", "tilemap-texture",
+            "tank-texture", "tank-tiger-down", "tank-tiger-left", "tank-tiger-right",
+            "tank-panther-up", "tank-panther-down", "tank-panther-left", "tank-panther-right",
+            "truck-texture", "truck-ford-down", "truck-ford-left", "truck-ford-right", "truck-ford-killed",
+            "helicopter", "sfx_ui_hover", "sfx_ui_click", "sfx_cannon", "sfx_explosion", "sfx_radar_ping",
+        }
+    })
 else
-    load_scene("scripts/hub.lua")
+    local scene_shortcuts = {
+        hub        = "scripts/scenes/hub.lua",
+        jungle     = "scripts/scenes/jungle_strike.lua",
+        ui         = "scripts/scenes/ui_lab.lua",
+        physics    = "scripts/scenes/physics_lab.lua",
+        tilemap    = "scripts/scenes/tilemap_lab.lua",
+        audio      = "scripts/scenes/audio_lab.lua",
+        stress_lab = "scripts/scenes/stress_lab.lua",
+    }
+    load_scene(scene_shortcuts[oct_startup_mode] or "scripts/scenes/hub.lua")
 end

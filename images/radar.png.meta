@@ -1,0 +1,4 @@
+return {
+  id = "radar-sheet",
+  no_atlas = true,
+}

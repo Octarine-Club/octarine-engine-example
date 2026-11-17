@@ -1,0 +1,13 @@
+<OXML>
+  <Param name="label" default="STAT" />
+  <Param name="value" default="0" />
+
+  <Row class="pill-box" width="auto" height="30px" align="center" gap="8px">
+    <Slot name="badge">
+      <Label text="{label}:" font="arial-font-12" color="#94a3b8" width="auto" height="20px" text-valign="center" />
+    </Slot>
+    <Slot>
+      <Label text="{value}" font="arial-font-12" color="#eab308" width="auto" height="20px" text-valign="center" />
+    </Slot>
+  </Row>
+</OXML>

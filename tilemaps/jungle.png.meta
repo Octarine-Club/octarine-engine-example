@@ -1,1 +1,4 @@
-return { id = "tilemap-texture" }
+return {
+  id = "tilemap-texture",
+  no_atlas = true,
+}

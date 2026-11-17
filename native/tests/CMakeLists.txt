@@ -1,0 +1,3 @@
+octarine_add_engine_test(OctarineShowcaseModuleTest ShowcaseModuleTest ShowcaseModuleTest.cpp)
+target_include_directories(OctarineShowcaseModuleTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
+target_link_libraries(OctarineShowcaseModuleTest PRIVATE octarine_game_module)

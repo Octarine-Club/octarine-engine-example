@@ -1,0 +1,42 @@
+<OXML>
+  <Style src="ui/theme.oss" />
+  <Use name="StatPill" src="ui/widgets/stat_pill.oxml" />
+
+  <Canvas fixed="true" base-layer="35">
+    <Column width="100%" height="100%" padding="12px" justify="end" pointer-events="none">
+      <!-- Bottom Tactical HUD Bar -->
+      <Row class="chrome-bar" width="100%" height="74px" align="center" justify="space-between" pointer-events="stop">
+        <Row width="auto" height="54px" gap="18px" align="center">
+          <Column width="210px" height="48px" gap="4px">
+            <Label text="ARMOR: {hp}/{maxHp}" font="arial-font-12" color="#f8fafc" width="100%" height="18px" />
+            <ProgressBar value="{hp / maxHp}" width="100%" height="16px" color="#22c55e" track-color="#1e293b" />
+          </Column>
+
+          <Column width="180px" height="48px" gap="4px">
+            <Label text="ROCKET / LASER CHARGE" font="arial-font-12" color="#38bdf8" width="100%" height="18px" />
+            <ProgressBar value="{specialCharge}" width="100%" height="16px" color="#38bdf8" track-color="#1e293b" />
+          </Column>
+        </Row>
+
+        <Row width="auto" height="36px" gap="10px" align="center">
+          <StatPill label="SCORE" value="{score}" />
+          <StatPill label="TARGETS" value="{targetsRemaining}" />
+          <StatPill label="RADAR" value="{radarStatus}" />
+          <StatPill label="CHUNKS" value="{activeChunks}" />
+        </Row>
+      </Row>
+    </Column>
+
+    <!-- Mission Complete / Defeat Modal Overlay -->
+    <Box if="{missionEnded}" width="100%" height="100%" background-color="#000000aa" pointer-events="stop">
+      <Column class="panel-surface" width="460px" height="auto" padding="24px" gap="14px" anchor="center">
+        <Label text="{missionBanner}" font="charriot-24" color="#eab308" width="100%" height="32px" text-align="center" />
+        <Label text="{missionSummary}" font="arial-font-14" color="#e2e8f0" width="100%" height="auto" wrap="true" text-align="center" />
+        <Row width="100%" height="44px" gap="12px" justify="center">
+          <Button class="btn-primary" width="180px" height="40px" text="Play Again [R]" key="r" on-click="onRestartMission" />
+          <Button class="btn" width="160px" height="40px" text="Return to Hub" on-click="onReturnHub" />
+        </Row>
+      </Column>
+    </Box>
+  </Canvas>
+</OXML>

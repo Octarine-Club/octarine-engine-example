@@ -1,0 +1,98 @@
+<OXML>
+  <Style src="ui/theme.oss" />
+  <Use name="StatPill" src="ui/widgets/stat_pill.oxml" />
+
+  <Canvas fixed="true" base-layer="20">
+    <Column width="100%" height="100%" padding="24px" gap="16px">
+      <!-- Header Banner -->
+      <Row class="panel-surface" width="100%" height="84px" padding="14px 20px" align="center" justify="space-between" pointer-events="stop">
+        <Row width="auto" height="56px" gap="16px" align="center">
+          <Image sprite="icon" width="52px" height="52px" />
+          <Column width="auto" height="auto" gap="4px">
+            <Label class="title-display" text="OCTARINE ENGINE SHOWCASE" width="auto" height="30px" />
+            <Label class="muted-text" text="Interactive Showcase of Engine Subsystems &amp; Game Architecture (v0.2.6)" width="auto" height="18px" />
+          </Column>
+        </Row>
+
+        <Row width="auto" height="34px" gap="10px" align="center">
+          <StatPill label="MODE" value="{runtimeMode}" />
+          <StatPill label="BEST SCORE" value="{bestScore}" />
+          <StatPill label="LABS" value="{labsVisitedCount}/6" />
+        </Row>
+      </Row>
+
+      <!-- Main Split Workspace -->
+      <Row width="100%" flex-grow="1" gap="18px" pointer-events="none">
+        <!-- Left Navigation List -->
+        <Column class="panel-surface" width="440px" height="100%" padding="16px" gap="12px" pointer-events="stop">
+          <Label class="section-heading" text="SELECT SHOWCASE OR LAB" width="100%" height="22px" />
+          <Label class="muted-text" text="Navigate with Mouse, Tab/Arrows, or Gamepad D-Pad + South" width="100%" height="18px" />
+
+          <ScrollView width="100%" flex-grow="1" wheel-step="36">
+            <Column width="100%" height="auto" gap="8px">
+              <Button each="item, idx in {demos}"
+                      class="nav-card"
+                      width="100%"
+                      height="52px"
+                      text="{idx}. {item.title}"
+                      on-click="onSelectOrLaunch"
+                      on-focus="onFocusDemo" />
+            </Column>
+          </ScrollView>
+        </Column>
+
+        <!-- Right Detail Inspector Card -->
+        <Column class="panel-surface" flex-grow="1" height="100%" padding="22px" gap="14px" justify="space-between" pointer-events="stop">
+          <Column width="100%" height="auto" gap="12px">
+            <Row width="100%" height="auto" justify="space-between" align="center">
+              <Label text="{selectedTitle}" font="charriot-24" color="#eab308" width="auto" height="32px" outline-color="#000000ff" outline-width="2px" />
+              <Label text="{selectedTag}" font="arial-font-12" color="#38bdf8" width="auto" height="20px" />
+            </Row>
+
+            <Label text="{selectedDesc}" font="arial-font-14" color="#e2e8f0" width="100%" height="auto" wrap="true" />
+
+            <Column class="card-surface" width="100%" height="auto" padding="14px" gap="8px">
+              <Label text="ENGINE PARADIGMS DEMONSTRATED" font="charriot-14" color="#38bdf8" width="100%" height="20px" />
+              <Row each="p in {selectedParadigms}" width="100%" height="22px" gap="8px" align="center">
+                <Label text="+" font="charriot-14" color="#22c55e" width="16px" height="20px" />
+                <Label text="{p}" font="arial-font-14" color="#f1f5f9" flex-grow="1" height="20px" />
+              </Row>
+            </Column>
+
+            <Column class="card-surface" width="100%" height="auto" padding="12px" gap="4px">
+              <Label text="SOURCE ENTRYPOINT" font="arial-font-12" color="#94a3b8" width="100%" height="16px" />
+              <Label text="{selectedSource}" font="arial-font-14" color="#fde047" width="100%" height="20px" />
+            </Column>
+          </Column>
+
+          <Row width="100%" height="50px" gap="12px" align="center" justify="space-between">
+            <Button ref="launchBtn"
+                    class="btn-primary"
+                    width="280px"
+                    height="46px"
+                    text="LAUNCH SELECTED [ENTER]"
+                    key="return"
+                    gamepad="south"
+                    on-click="onLaunchSelected" />
+            <Label text="{statusHint}" font="arial-font-12" color="#94a3b8" flex-grow="1" height="24px" text-align="right" text-valign="center" />
+          </Row>
+        </Column>
+      </Row>
+
+      <!-- Footer Quick Controls -->
+      <Row class="panel-surface" width="100%" height="56px" padding="10px 16px" align="center" justify="space-between" pointer-events="stop">
+        <Row width="auto" height="36px" gap="14px" align="center">
+          <Toggle class="toggle-btn" width="140px" height="32px" text="UI Wireframes [F2]" bind-value="wireframes" on-change="onToggleWireframes" />
+          <Toggle class="toggle-btn" width="130px" height="32px" text="Mute Audio" bind-value="audioMuted" on-change="onToggleMute" />
+          <Label text="Master Volume:" font="arial-font-12" color="#cbd5e1" width="auto" height="20px" text-valign="center" />
+          <Slider class="slider-ctrl" width="160px" height="20px" min="0" max="100" step="5" bind-value="volumePct" color="#38bdf8" track-color="#0f172a" on-change="onVolumeChange" />
+        </Row>
+
+        <Row width="auto" height="36px" gap="10px" align="center">
+          <Button class="btn" width="140px" height="32px" text="Dev Overlay [F1]" on-click="onToggleDevGui" />
+          <Button class="btn" width="100px" height="32px" text="Quit" on-click="onQuit" />
+        </Row>
+      </Row>
+    </Column>
+  </Canvas>
+</OXML>

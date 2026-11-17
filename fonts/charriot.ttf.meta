@@ -1,0 +1,5 @@
+-- Multi-size display pixel font ladder for titles, buttons, and section headers.
+return {
+  id = "charriot",
+  sizes = { 14, 16, 24, 32 },
+}

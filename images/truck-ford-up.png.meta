@@ -1,1 +1,4 @@
-return { id = "truck-texture" }
+return {
+  id = "truck-texture",
+  atlas = "units",
+}

@@ -1,10 +1,23 @@
+# Engine-generated runtime state
 imgui.ini
-editor_prefs.ini
-preferences.ini
+*_prefs.ini
+user_settings.ini
+saves/
+save/
+showcase_state_dump.json
 
-# asset_manifest.lua (bake output) is now committed: device/shipped builds (Android/iOS) require it,
-# and the OCTARINE_SHIPPED gate means a committed manifest no longer freezes dev `-p` runs (those
-# always rescan). Regenerate with `OctarineEngine <project> -m bake` after adding/renaming assets.
+# Asset bake outputs + caches
+asset_manifest.lua
+asset_bundle.pak
+*.meta.cache
+_atlases/
+normalized/
 
-# Editor/source backups - never ship; the engine packaging also excludes these from builds.
-*.bak
+# Dev IDE LuaLS stub output
+types/
+
+# Local build & profile dirs
+build/
+.cache/
+*.profraw
+.DS_Store

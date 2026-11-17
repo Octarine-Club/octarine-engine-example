@@ -1,1 +1,4 @@
-return { id = "chopper-texture" }
+return {
+  id = "chopper-texture",
+  no_atlas = true,
+}

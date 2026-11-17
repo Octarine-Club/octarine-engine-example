@@ -1,0 +1,17 @@
+<OXML>
+  <Style src="ui/theme.oss" />
+
+  <Canvas fixed="true" base-layer="30">
+    <Column width="100%" height="100%" padding="12px" justify="end" pointer-events="none">
+      <Row class="chrome-bar" width="auto" height="54px" align="center" gap="8px" pointer-events="stop">
+        <Button class="btn" width="84px" height="32px" text="250" on-click="onSpawn250" />
+        <Button class="btn" width="84px" height="32px" text="1,000" on-click="onSpawn1000" />
+        <Button class="btn" width="84px" height="32px" text="2,500" on-click="onSpawn2500" />
+        <Toggle class="toggle-btn" width="136px" height="32px" text="Deterministic" bind-value="deterministic" on-change="onToggleDet" />
+        <Button class="btn-primary" width="200px" height="32px" text="Replay 120-Tick Test" on-click="onRunDeterminismCheck" />
+        <Label text="Hash: {stateHash}" font="arial-font-12" color="#22c55e" width="auto" height="22px" text-valign="center" />
+        <Label text="{modeStatus}" font="arial-font-12" color="#eab308" width="auto" height="22px" text-valign="center" />
+      </Row>
+    </Column>
+  </Canvas>
+</OXML>

@@ -1,1 +1,4 @@
-return { id = "tank-texture" }
+return {
+  id = "tank-texture",
+  atlas = "units",
+}

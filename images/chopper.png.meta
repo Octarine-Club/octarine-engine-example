@@ -1,0 +1,4 @@
+return {
+  id = "chopper-drone",
+  no_atlas = true,
+}
