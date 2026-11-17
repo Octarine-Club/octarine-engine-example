@@ -6,7 +6,17 @@ It runs **out-of-the-box** on any stock `OctarineEngine` player build (pure Lua 
 
 ---
 
-## Quickstart
+## Download & Play (No Build Required)
+
+Pre-built standalone packages (with assets packed into `asset_bundle.pak` and the native C++ game module compiled in) are published on the [GitHub Releases](https://github.com/Octarine-Club/octarine-engine-example/releases) page:
+
+- **Windows (x64):** Download `*-windows-x64.zip`, extract, and launch `Octarine Engine Showcase.exe`.
+- **macOS:** Download `*-macos-*.dmg`, open it, and drag `Octarine Engine Showcase.app` to **Applications** (if Gatekeeper warns on ad-hoc signed builds, right-click → **Open** or run `xattr -cr "Octarine Engine Showcase.app"`).
+- **Linux (x86_64):** Download `*-linux-x86_64.tar.gz`, extract, and run `./"Octarine Engine Showcase"`.
+
+---
+
+## Quickstart (Build / Dev Iteration)
 
 ### 1. Run with Stock `OctarineEngine` (Pure Lua)
 ```bash

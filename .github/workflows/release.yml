@@ -1,140 +1,398 @@
 name: Release
 
-# Build and publish a game release package for each platform on version tag pushes.
-# Each leg downloads the engine player-release SDK binary for its platform (no build
-# from source required), bakes the asset manifest, then packages engine + game dir
-# into a self-contained archive and uploads it as a GitHub Release asset.
+# Build, verify, and publish self-contained shipped game packages for Linux, Windows, and macOS.
 #
-# The engine version to pull is read from project.ini (engine_version key) so the
-# declared version and the downloaded binary stay in sync without manual edits to
-# this workflow.
+# Each platform leg builds Octarine Engine in `ship-release` (or `ship-mac-universal` on macOS
+# for engine >= 0.3.0) with this project's native C++ module (`native/`) and CPack packaging
+# (`-DOCTARINE_PACKAGE_PROJECT=... -DOCTARINE_GAME_MODULE_DIR=... --target package`), producing
+# double-clickable standalone builds with `asset_bundle.pak` and no source/build steps required
+# for players.
+#
+# The engine tag to check out is read from `project.ini` (`engine_version`).
 on:
-  workflow_dispatch:
   push:
     tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish/update GitHub Release for v<version_name> (from project.ini)'
+        type: boolean
+        default: false
+      engine_ref:
+        description: 'Override octarine-engine git ref (defaults to v<engine_version> from project.ini)'
+        type: string
+        default: ''
 
 jobs:
-  release:
-    name: ${{ matrix.platform }}
+  prepare:
+    name: Resolve version & build matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      engine_version: ${{ steps.meta.outputs.engine_version }}
+      engine_ref: ${{ steps.meta.outputs.engine_ref }}
+      game_version: ${{ steps.meta.outputs.game_version }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      macos_preset: ${{ steps.meta.outputs.macos_preset }}
+      macos_arch: ${{ steps.meta.outputs.macos_arch }}
+    steps:
+      - name: Checkout game project
+        uses: actions/checkout@v4
+
+      - name: Read project.ini metadata
+        id: meta
+        shell: bash
+        env:
+          INPUT_ENGINE_REF: ${{ inputs.engine_ref || '' }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          ini = {}
+          with open("project.ini", "r", encoding="utf-8") as f:
+              for raw in f:
+                  line = raw.strip()
+                  if not line or line.startswith("#") or "=" not in line:
+                      continue
+                  k, v = line.split("=", 1)
+                  ini[k.strip()] = v.strip()
+
+          engine_version = ini.get("engine_version", "")
+          version_name = ini.get("version_name", "")
+          if not engine_version or not version_name:
+              raise SystemExit("project.ini must define engine_version and version_name")
+
+          ref_override = os.environ.get("INPUT_ENGINE_REF", "").strip()
+          engine_ref = ref_override if ref_override else f"v{engine_version}"
+
+          gh_ref = os.environ.get("GITHUB_REF", "")
+          gh_ref_name = os.environ.get("GITHUB_REF_NAME", "")
+          if gh_ref.startswith("refs/tags/v"):
+              game_version = gh_ref[len("refs/tags/v"):]
+              release_tag = gh_ref_name
+          else:
+              game_version = version_name
+              release_tag = f"v{game_version}"
+
+          # ship-mac-universal requires Octarine Engine >= 0.3.0 (VCPKG_HOST_TRIPLET luac lookup).
+          use_universal = (engine_ref == "main")
+          m = re.match(r"^v?(\d+)\.(\d+)\.(\d+)", engine_ref)
+          ver_for_preset = m.groups() if m else tuple(engine_version.split(".")[:3])
+          try:
+              if tuple(int(x) for x in ver_for_preset) >= (0, 3, 0):
+                  use_universal = True
+          except ValueError:
+              pass
+
+          macos_preset = "ship-mac-universal" if use_universal else "ship-release"
+          macos_arch = "universal" if use_universal else "arm64"
+
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a", encoding="utf-8") as f:
+              for k, v in [
+                  ("engine_version", engine_version),
+                  ("engine_ref", engine_ref),
+                  ("game_version", game_version),
+                  ("release_tag", release_tag),
+                  ("macos_preset", macos_preset),
+                  ("macos_arch", macos_arch),
+              ]:
+                  f.write(f"{k}={v}\n")
+                  print(f"{k}={v}")
+          PY
+
+  verify:
+    name: Verify native tests & showcase scenes
+    needs: prepare
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Octarine Engine
+        uses: actions/checkout@v4
+        with:
+          repository: Octarine-Club/octarine-engine
+          ref: ${{ needs.prepare.outputs.engine_ref }}
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Checkout example game
+        uses: actions/checkout@v4
+        with:
+          path: game
+
+      - name: Export vcpkg binary cache env
+        uses: ./.github/actions/vcpkg-cache-env
+
+      - name: Install Linux build deps
+        uses: ./.github/actions/linux-build-deps
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: example-verify-linux-player-debug
+          max-size: 500M
+
+      - name: Configure debug build with native module & tests
+        run: |
+          cmake --preset player-debug \
+            -DOCTARINE_ENABLE_TESTS=ON \
+            -DOCTARINE_GAME_MODULE_DIR="$PWD/game/native"
+
+      - name: Build engine, native module, and unit test
+        run: |
+          cmake --build build/player-debug --parallel \
+            --target OctarineEngine OctarineShowcaseModuleTest
+
+      - name: Run native C++ unit tests
+        run: ctest --test-dir build/player-debug -R ShowcaseModuleTest --output-on-failure
+
+      - name: Bake assets & run headless showcase verification
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          ./build/player-debug/bin/debug/OctarineEngine "$PWD/game" -m bake
+          ./build/player-debug/bin/debug/OctarineEngine "$PWD/game" --headless --startup-mode verify
+
+  package:
+    name: Package (${{ matrix.platform }})
+    needs: prepare
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             platform: linux
-            ext: tar.gz
+            preset: ship-release
           - os: windows-latest
             platform: windows
-            ext: zip
+            preset: ship-release
           - os: macos-latest
             platform: macos
-            ext: tar.gz
+            preset: ${{ needs.prepare.outputs.macos_preset }}
 
     steps:
-      - name: Checkout game project
+      - name: Checkout Octarine Engine
         uses: actions/checkout@v4
-
-      - name: Read engine version from project.ini
-        id: engine
-        shell: bash
-        run: |
-          ver=$(grep -E '^engine_version\s*=' project.ini | sed 's/.*=\s*//' | tr -d '[:space:]')
-          if [ -z "$ver" ]; then
-            echo "engine_version not found in project.ini" >&2
-            exit 1
-          fi
-          echo "version=$ver" >> "$GITHUB_OUTPUT"
-          echo "Engine version: $ver"
-
-      - name: Download engine (player build)
-        id: engine-sdk
-        uses: Octarine-Club/octarine-engine/.github/actions/setup-engine@main
         with:
-          engine-version: ${{ steps.engine.outputs.version }}
-          flavor: player
-          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: Octarine-Club/octarine-engine
+          ref: ${{ needs.prepare.outputs.engine_ref }}
+          submodules: recursive
+          fetch-depth: 0
 
-      - name: Bake asset manifest
-        shell: bash
-        run: OctarineEngine . -m bake
+      - name: Checkout example game
+        uses: actions/checkout@v4
+        with:
+          path: game
 
-      - name: Stage game package (Linux / macOS)
+      - name: Export vcpkg binary cache env
+        uses: ./.github/actions/vcpkg-cache-env
+
+      - name: Install Linux build deps
+        if: matrix.platform == 'linux'
+        uses: ./.github/actions/linux-build-deps
+
+      - name: Setup MSVC dev environment (Windows)
+        if: matrix.platform == 'windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Setup ccache
+        if: matrix.platform != 'windows'
+        uses: hendrikmuhs/ccache-action@v1
+        with:
+          key: example-ship-${{ matrix.platform }}-${{ matrix.preset }}
+          max-size: 500M
+
+      - name: Configure shipped game package (Linux / macOS)
         if: matrix.platform != 'windows'
         shell: bash
         run: |
-          game_ver="${{ github.ref_name }}"
-          game_ver="${game_ver#v}"
-          pkg="OctarineEngine-Example-${game_ver}-${{ matrix.platform }}"
-          mkdir -p "$pkg"
-          cp "$(which OctarineEngine)" "$pkg/"
-          rsync -a --exclude='.git' --exclude='.github' --exclude='*.meta' \
-            --exclude='editor_prefs.ini' --exclude='preferences.ini' \
-            --exclude='imgui.ini' \
-            ./ "$pkg/"
-          tar -czf "${pkg}.tar.gz" "$pkg/"
+          cmake --preset "${{ matrix.preset }}" \
+            -DOCTARINE_PACKAGE_PROJECT="$PWD/game" \
+            -DOCTARINE_GAME_MODULE_DIR="$PWD/game/native" \
+            -DOCTARINE_PACKAGE_VERSION_NAME="${{ needs.prepare.outputs.game_version }}"
 
-      - name: Stage game package (Windows)
+      - name: Configure shipped game package (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
         run: |
-          $gameVer = "${{ github.ref_name }}" -replace '^v', ''
-          $pkg = "OctarineEngine-Example-${gameVer}-windows"
-          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
-          $engineBin = "${{ steps.engine-sdk.outputs.engine-bin }}"
-          Copy-Item $engineBin "$pkg\"
-          $exclude = @('.git', '.github', '*.meta', 'editor_prefs.ini',
-                       'preferences.ini', 'imgui.ini')
-          Get-ChildItem -Force | Where-Object {
-            $name = $_.Name
-            $name -ne $pkg -and -not ($exclude | Where-Object { $name -like $_ })
-          } | Copy-Item -Destination "$pkg\" -Recurse -Force
-          Compress-Archive -Path "$pkg\*" -DestinationPath "${pkg}.zip" -Force
+          $gameDir = (Resolve-Path "game").Path -replace '\\', '/'
+          $nativeDir = (Resolve-Path "game/native").Path -replace '\\', '/'
+          cmake --preset "${{ matrix.preset }}" `
+            "-DOCTARINE_PACKAGE_PROJECT=$gameDir" `
+            "-DOCTARINE_GAME_MODULE_DIR=$nativeDir" `
+            "-DOCTARINE_PACKAGE_VERSION_NAME=${{ needs.prepare.outputs.game_version }}"
 
-      - name: Upload release artifact
+      - name: Build shipped binary
+        run: cmake --build "build/${{ matrix.preset }}" --config Release --parallel
+
+      - name: Package deliverable (CPack)
+        run: cmake --build "build/${{ matrix.preset }}" --target package
+
+      - name: Sign & notarize macOS DMG (when Developer ID secrets are configured)
+        if: >
+          matrix.platform == 'macos' &&
+          (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release))
+        env:
+          MACOS_DEVELOPER_ID_P12: ${{ secrets.MACOS_DEVELOPER_ID_P12 }}
+          MACOS_DEVELOPER_ID_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID_USERNAME: ${{ secrets.APPLE_ID_USERNAME }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        shell: bash
+        run: |
+          if [ -z "$MACOS_DEVELOPER_ID_P12" ]; then
+            echo "MACOS_DEVELOPER_ID_P12 not configured; shipping ad-hoc signed DMG."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/octarine-signing.keychain-db"
+          p12="$RUNNER_TEMP/dev-id.p12"
+          echo "$MACOS_DEVELOPER_ID_P12" | base64 --decode > "$p12"
+          security create-keychain -p "temp-pass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "temp-pass" "$keychain"
+          security import "$p12" -P "$MACOS_DEVELOPER_ID_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "temp-pass" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          dmg=$(find "build/${{ matrix.preset }}" -maxdepth 1 -type f -name "*.dmg" | head -n 1)
+          ./scripts/octarine-macos-notarize.sh --input "$dmg" --output "$dmg"
+
+      - name: Stage & smoke-test package (Linux)
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          mkdir -p dist "$RUNNER_TEMP/smoke"
+          src=$(find "build/${{ matrix.preset }}" -maxdepth 1 -type f -name "*.tar.gz" | head -n 1)
+          [ -n "$src" ] || { echo "ERROR: CPack .tar.gz not found"; ls -la "build/${{ matrix.preset }}"; exit 1; }
+          out="dist/Octarine-Engine-Showcase-${{ needs.prepare.outputs.game_version }}-linux-x86_64.tar.gz"
+          cp "$src" "$out"
+
+          tar -xzf "$out" -C "$RUNNER_TEMP/smoke"
+          exe=$(find "$RUNNER_TEMP/smoke" -maxdepth 3 -type f -name "Octarine Engine Showcase" | head -n 1)
+          [ -n "$exe" ] || { echo "ERROR: packaged executable not found"; find "$RUNNER_TEMP/smoke" -maxdepth 3; exit 1; }
+          chmod +x "$exe"
+          SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy OCTARINE_CAPTURE_FRAME=30 OCTARINE_CAPTURE_PATH="$RUNNER_TEMP/smoke.bmp" "$exe"
+          test -s "$RUNNER_TEMP/smoke.bmp"
+
+      - name: Stage & smoke-test package (macOS)
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          mkdir -p dist "$RUNNER_TEMP/smoke-mnt" "$RUNNER_TEMP/smoke"
+          src=$(find "build/${{ matrix.preset }}" -maxdepth 1 -type f -name "*.dmg" | head -n 1)
+          [ -n "$src" ] || { echo "ERROR: CPack .dmg not found"; ls -la "build/${{ matrix.preset }}"; exit 1; }
+          out="dist/Octarine-Engine-Showcase-${{ needs.prepare.outputs.game_version }}-macos-${{ needs.prepare.outputs.macos_arch }}.dmg"
+          cp "$src" "$out"
+
+          hdiutil attach "$out" -mountpoint "$RUNNER_TEMP/smoke-mnt" -nobrowse -quiet
+          trap 'hdiutil detach "$RUNNER_TEMP/smoke-mnt" -quiet 2>/dev/null || true' EXIT
+          app=$(find "$RUNNER_TEMP/smoke-mnt" -maxdepth 2 -name "*.app" -print -quit)
+          [ -n "$app" ] || { echo "ERROR: .app bundle not found inside DMG"; ls -la "$RUNNER_TEMP/smoke-mnt"; exit 1; }
+          ditto "$app" "$RUNNER_TEMP/smoke/Octarine Engine Showcase.app"
+          hdiutil detach "$RUNNER_TEMP/smoke-mnt" -quiet
+
+          SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy OCTARINE_CAPTURE_FRAME=30 OCTARINE_CAPTURE_PATH="$RUNNER_TEMP/smoke.bmp" \
+            "$RUNNER_TEMP/smoke/Octarine Engine Showcase.app/Contents/MacOS/Octarine Engine Showcase"
+          test -s "$RUNNER_TEMP/smoke.bmp"
+
+      - name: Stage & smoke-test package (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $src = Get-ChildItem -File "build\${{ matrix.preset }}\*.zip" | Select-Object -First 1
+          if (-not $src) { Write-Error "CPack .zip not found"; Get-ChildItem "build\${{ matrix.preset }}"; exit 1 }
+          $out = "dist\Octarine-Engine-Showcase-${{ needs.prepare.outputs.game_version }}-windows-x64.zip"
+          Copy-Item $src.FullName $out
+
+          $smokeDir = Join-Path $env:RUNNER_TEMP "smoke"
+          New-Item -ItemType Directory -Force -Path $smokeDir | Out-Null
+          Expand-Archive -Path $out -DestinationPath $smokeDir -Force
+          $exe = Get-ChildItem -Path $smokeDir -Recurse -Filter "Octarine Engine Showcase.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Error "Packaged executable not found"; exit 1 }
+
+          $env:SDL_VIDEODRIVER = "dummy"
+          $env:SDL_AUDIODRIVER = "dummy"
+          $env:OCTARINE_CAPTURE_FRAME = "30"
+          $env:OCTARINE_CAPTURE_PATH = Join-Path $env:RUNNER_TEMP "smoke.bmp"
+          & $exe.FullName
+          if ($LASTEXITCODE -ne 0) { Write-Error "Smoke test exited with $LASTEXITCODE"; exit 1 }
+          if (-not (Test-Path $env:OCTARINE_CAPTURE_PATH) -or (Get-Item $env:OCTARINE_CAPTURE_PATH).Length -eq 0) {
+            Write-Error "Smoke test did not capture a frame"
+            exit 1
+          }
+
+      - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OctarineEngine-Example-${{ matrix.platform }}
-          path: OctarineEngine-Example-*.${{ matrix.ext }}
+          name: Octarine-Engine-Showcase-${{ matrix.platform }}
+          path: dist/Octarine-Engine-Showcase-*
           if-no-files-found: error
+          retention-days: 7
 
   publish:
     name: Publish GitHub Release
-    needs: release
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    needs: [prepare, verify, package]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
     steps:
-      - name: Download all platform packages
+      - name: Download packaged game builds
         uses: actions/download-artifact@v4
         with:
-          pattern: OctarineEngine-Example-*
+          pattern: Octarine-Engine-Showcase-*
           merge-multiple: false
           path: release-assets/
 
-      - name: Collect assets
+      - name: Collect assets & compute checksums
         shell: bash
         run: |
-          for dir in release-assets/OctarineEngine-Example-*/; do
-            f=$(ls "$dir" | head -n 1)
-            cp "$dir/$f" "$f"
+          mkdir -p final-assets
+          for dir in release-assets/Octarine-Engine-Showcase-*/; do
+            for f in "$dir"*; do
+              [ -f "$f" ] && cp "$f" final-assets/
+            done
           done
-          ls -lh OctarineEngine-Example-*
+          (cd final-assets && sha256sum Octarine-Engine-Showcase-* > SHA256SUMS.txt)
+          ls -lh final-assets/
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          version="${GITHUB_REF#refs/tags/v}"
-          assets=()
-          for f in OctarineEngine-Example-*; do
-            [ -f "$f" ] && assets+=("$f")
-          done
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Octarine Engine Example v${version}" \
-            --generate-notes \
-            "${assets[@]}"
+          tag="${{ needs.prepare.outputs.release_tag }}"
+          ver="${{ needs.prepare.outputs.game_version }}"
+          eng_ver="${{ needs.prepare.outputs.engine_version }}"
+
+          cat > release_notes.md <<EOF
+          Pre-built standalone **Octarine Engine Showcase ${tag}** (built on Octarine Engine \`${{ needs.prepare.outputs.engine_ref }}\` with the native C++ game module enabled). No compiler or engine setup required.
+
+          ### Downloads
+
+          | Platform | Package | How to Run |
+          |---|---|---|
+          | **Windows (x64)** | \`Octarine-Engine-Showcase-${ver}-windows-x64.zip\` | Extract the zip and double-click \`Octarine Engine Showcase.exe\` |
+          | **macOS** | \`Octarine-Engine-Showcase-${ver}-macos-${{ needs.prepare.outputs.macos_arch }}.dmg\` | Open the DMG, drag \`Octarine Engine Showcase.app\` to Applications (if Gatekeeper warns on unsigned builds, right-click → **Open** or run \`xattr -cr "Octarine Engine Showcase.app"\`) |
+          | **Linux (x86_64)** | \`Octarine-Engine-Showcase-${ver}-linux-x86_64.tar.gz\` | \`tar -xzf Octarine-Engine-Showcase-${ver}-linux-x86_64.tar.gz && cd "Octarine Engine Showcase-${ver}-Linux" && "./Octarine Engine Showcase"\` |
+
+          Checksums are included in \`SHA256SUMS.txt\`.
+          EOF
+
+          assets=(final-assets/*)
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber "${assets[@]}"
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" \
+              --title "Octarine Engine Showcase ${tag}" \
+              --notes-file release_notes.md
+          else
+            gh release create "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "${GITHUB_SHA}" \
+              --title "Octarine Engine Showcase ${tag}" \
+              --notes-file release_notes.md \
+              "${assets[@]}"
+          fi
